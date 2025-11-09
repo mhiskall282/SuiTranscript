@@ -109,7 +109,7 @@
 // }
 
 module 0x0::transcript_registry {
-    use sui::object::{UID};
+    use sui::object::{UID, ID};
     use sui::tx_context::{TxContext, sender};
     use sui::transfer;
     use sui::event;
@@ -178,6 +178,47 @@ module 0x0::transcript_registry {
         });
 
         transfer::transfer(transcript, owner);
+    }
+
+    /// CLI-friendly entry: take expiration as u64 (0 => none) and return the created object's ID.
+    entry fun issue_transcript_cli(
+        owner: address,
+        walrus_cid: vector<u8>,
+        transcript_hash: vector<u8>,
+        seal_metadata: vector<u8>,
+        expiration_ms: u64,
+        _ctx: &mut TxContext,
+    ): ID {
+        let expiration_opt = if (expiration_ms == 0) { option::none() } else { option::some(expiration_ms) };
+
+        let issuer_addr = sender(_ctx);
+        let now: u64 = 0;
+
+        let mut transcript = Transcript {
+            id: sui::object::new(_ctx),
+            owner,
+            issuer: issuer_addr,
+            walrus_cid,
+            transcript_hash,
+            issued_at: now,
+            expires_at: expiration_opt,
+            revoked: false,
+            seal_metadata,
+        };
+
+        // Capture ID before transferring the object
+        let id = sui::object::id(&transcript);
+
+        event::emit<TranscriptIssued>(TranscriptIssued {
+            owner,
+            issuer: issuer_addr,
+            walrus_cid: transcript.walrus_cid,
+            transcript_hash: transcript.transcript_hash,
+            issued_at: now,
+        });
+
+        transfer::transfer(transcript, owner);
+        id
     }
 
     /// Revoke an existing transcript (only issuer can revoke)
